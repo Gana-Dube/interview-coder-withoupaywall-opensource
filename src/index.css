@@ -68,3 +68,35 @@ option {
   inset: -16px;
   opacity: 1;
 }
+
+/* Custom Scrollbar Styles */
+.custom-scrollbar {
+  /* For Firefox */
+  scrollbar-width: thin;
+  scrollbar-color: #555 #333; /* thumb and track */
+}
+
+/* For Webkit browsers (Chrome, Safari, Edge, Electron) */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 8px; /* Width of the vertical scrollbar */
+  height: 8px; /* Height of the horizontal scrollbar */
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: #333333; /* Opaque dark gray track */
+  border-radius: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: #555555; /* Opaque slightly lighter gray thumb */
+  border-radius: 4px;
+  border: 2px solid #333333; /* Creates a bit of padding around the thumb */
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: #777777; /* Lighter thumb on hover */
+}
+
+.custom-scrollbar::-webkit-scrollbar-corner {
+  background: #333333; /* Opaque dark gray for the corner where vertical and horizontal scrollbars meet */
+}

@@ -6,7 +6,8 @@ import { dracula } from "react-syntax-highlighter/dist/esm/styles/prism"
 
 import ScreenshotQueue from "../components/Queue/ScreenshotQueue"
 
-import { ProblemStatementData } from "../types/solutions"
+import { ProblemStatementData, SolutionData } from "../types/solutions"
+import { Screenshot } from "../types/screenshots"
 import SolutionCommands from "../components/Solutions/SolutionCommands"
 import Debug from "./Debug"
 import { useToast } from "../contexts/toast"
@@ -15,16 +16,22 @@ import { COMMAND_KEY } from "../utils/platform"
 export const ContentSection = ({
   title,
   content,
-  isLoading
+  isLoading,
+  isTitleInteractive = false
 }: {
-  title: string
+  title: React.ReactNode
   content: React.ReactNode
   isLoading: boolean
+  isTitleInteractive?: boolean
 }) => (
   <div className="space-y-2">
-    <h2 className="text-[13px] font-medium text-white tracking-wide">
-      {title}
-    </h2>
+    {isTitleInteractive ? (
+      title
+    ) : (
+      <h2 className="text-[13px] font-medium text-white tracking-wide">
+        {title}
+      </h2>
+    )}
     {isLoading ? (
       <div className="mt-4 flex">
         <p className="text-xs bg-gradient-to-r from-gray-300 via-gray-100 to-gray-300 bg-clip-text text-transparent animate-pulse">
@@ -183,6 +190,7 @@ const Solutions: React.FC<SolutionsProps> = ({
   const queryClient = useQueryClient()
   const contentRef = useRef<HTMLDivElement>(null)
 
+  const [isThoughtsOpen, setIsThoughtsOpen] = useState(false) // Accordion state for "My Thoughts"
   const [debugProcessing, setDebugProcessing] = useState(false)
   const [problemStatementData, setProblemStatementData] =
     useState<ProblemStatementData | null>(null)
@@ -303,7 +311,7 @@ const Solutions: React.FC<SolutionsProps> = ({
         setTimeComplexityData(null)
         setSpaceComplexityData(null)
       }),
-      window.electronAPI.onProblemExtracted((data) => {
+      window.electronAPI.onProblemExtracted((data: ProblemStatementData) => {
         queryClient.setQueryData(["problem_statement"], data)
       }),
       //if there was an error processing the initial solution
@@ -326,7 +334,7 @@ const Solutions: React.FC<SolutionsProps> = ({
         console.error("Processing error:", error)
       }),
       //when the initial solution is generated, we'll set the solution data to that
-      window.electronAPI.onSolutionSuccess((data) => {
+      window.electronAPI.onSolutionSuccess((data: SolutionData) => {
         if (!data) {
           console.warn("Received empty or invalid solution data")
           return
@@ -350,7 +358,7 @@ const Solutions: React.FC<SolutionsProps> = ({
           try {
             const existing = await window.electronAPI.getScreenshots()
             const screenshots =
-              existing.previews?.map((p) => ({
+              existing.previews?.map((p: Screenshot) => ({
                 id: p.path,
                 path: p.path,
                 preview: p.preview,
@@ -373,7 +381,7 @@ const Solutions: React.FC<SolutionsProps> = ({
         setDebugProcessing(true)
       }),
       //the first time debugging works, we'll set the view to debug and populate the cache with the data
-      window.electronAPI.onDebugSuccess((data) => {
+      window.electronAPI.onDebugSuccess((data: SolutionData) => {
         queryClient.setQueryData(["new_solution"], data)
         setDebugProcessing(false)
       }),
@@ -527,9 +535,25 @@ const Solutions: React.FC<SolutionsProps> = ({
                 {solutionData && (
                   <>
                     <ContentSection
-                      title={`My Thoughts (${COMMAND_KEY} + Arrow keys to scroll)`}
+                      isTitleInteractive={true}
+                      title={
+                        <div
+                          onClick={() => setIsThoughtsOpen(!isThoughtsOpen)}
+                          className="text-[13px] font-medium text-white tracking-wide flex justify-between w-full items-center cursor-pointer py-1"
+                          role="button"
+                          tabIndex={0}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              setIsThoughtsOpen(!isThoughtsOpen)
+                            }
+                          }}
+                        >
+                          <span>My Thoughts ({COMMAND_KEY} + Arrow keys to scroll)</span>
+                          <span className="ml-2 text-white">{isThoughtsOpen ? '▼' : '►'}</span>
+                        </div>
+                      }
                       content={
-                        thoughtsData && (
+                        isThoughtsOpen && thoughtsData && (
                           <div className="space-y-3">
                             <div className="space-y-1">
                               {thoughtsData.map((thought, index) => (
@@ -545,7 +569,7 @@ const Solutions: React.FC<SolutionsProps> = ({
                           </div>
                         )
                       }
-                      isLoading={!thoughtsData}
+                      isLoading={isThoughtsOpen && !thoughtsData}
                     />
 
                     <SolutionSection

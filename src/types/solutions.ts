@@ -28,3 +28,10 @@ export interface ProblemStatementData {
   validation_type: string
   difficulty: string
 }
+
+export interface SolutionData {
+  code: string;
+  thoughts: string[];
+  time_complexity: string;
+  space_complexity: string;
+}
