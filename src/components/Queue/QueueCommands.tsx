@@ -11,6 +11,8 @@ interface QueueCommandsProps {
   credits: number
   currentLanguage: string
   setLanguage: (language: string) => void
+  contextText?: string
+  selectedScreenshotPaths?: string[]
 }
 
 const QueueCommands: React.FC<QueueCommandsProps> = ({
@@ -18,7 +20,9 @@ const QueueCommands: React.FC<QueueCommandsProps> = ({
   screenshotCount = 0,
   credits,
   currentLanguage,
-  setLanguage
+  setLanguage,
+  contextText = "",
+  selectedScreenshotPaths = []
 }) => {
   const [isTooltipVisible, setIsTooltipVisible] = useState(false)
   const tooltipRef = useRef<HTMLDivElement>(null)
@@ -157,16 +161,18 @@ const QueueCommands: React.FC<QueueCommandsProps> = ({
           </div>
 
           {/* Solve Command */}
-          {screenshotCount > 0 && (
+          {(screenshotCount > 0 || contextText.length > 0) && (
             <div
               className={`flex flex-col cursor-pointer rounded px-2 py-1.5 hover:bg-white/10 transition-colors ${
                 credits <= 0 ? "opacity-50 cursor-not-allowed" : ""
               }`}
               onClick={async () => {
-
                 try {
                   const result =
-                    await window.electronAPI.triggerProcessScreenshots()
+                    await window.electronAPI.triggerProcessScreenshots(
+                      contextText || undefined,
+                      selectedScreenshotPaths.length > 0 ? selectedScreenshotPaths : undefined
+                    )
                   if (!result.success) {
                     console.error(
                       "Failed to process screenshots:",
@@ -188,6 +194,126 @@ const QueueCommands: React.FC<QueueCommandsProps> = ({
                   </button>
                   <button className="bg-white/10 rounded-md px-1.5 py-1 text-[11px] leading-none text-white/70">
                     ↵
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Explain Command */}
+          {(screenshotCount > 0 || contextText.length > 0) && (
+            <div
+              className={`flex flex-col cursor-pointer rounded px-2 py-1.5 hover:bg-white/10 transition-colors ${
+                credits <= 0 ? "opacity-50 cursor-not-allowed" : ""
+              }`}
+              onClick={async () => {
+
+                try {
+                  const result =
+                    await window.electronAPI.triggerExplainScreenshots(
+                      contextText || undefined,
+                      selectedScreenshotPaths.length > 0 ? selectedScreenshotPaths : undefined
+                    )
+                  if (!result.success) {
+                    console.error(
+                      "Failed to explain screenshots:",
+                      result.error
+                    )
+                    showToast("Error", "Failed to explain screenshots", "error")
+                  }
+                } catch (error) {
+                  console.error("Error explaining screenshots:", error)
+                  showToast("Error", "Failed to explain screenshots", "error")
+                }
+              }}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] leading-none">Explain </span>
+                <div className="flex gap-1 ml-2">
+                  <button className="bg-white/10 rounded-md px-1.5 py-1 text-[11px] leading-none text-white/70">
+                    {COMMAND_KEY}
+                  </button>
+                  <button className="bg-white/10 rounded-md px-1.5 py-1 text-[11px] leading-none text-white/70">
+                    E
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* General Command */}
+          {(screenshotCount > 0 || contextText.length > 0) && (
+            <div
+              className={`flex flex-col cursor-pointer rounded px-2 py-1.5 hover:bg-white/10 transition-colors ${
+                credits <= 0 ? "opacity-50 cursor-not-allowed" : ""
+              }`}
+              onClick={async () => {
+
+                try {
+                  const result =
+                    await window.electronAPI.triggerGeneralScreenshots(
+                      contextText || undefined,
+                      selectedScreenshotPaths.length > 0 ? selectedScreenshotPaths : undefined
+                    )
+                  if (!result.success) {
+                    console.error(
+                      "Failed to explain general topic:",
+                      result.error
+                    )
+                    showToast("Error", "Failed to explain general topic", "error")
+                  }
+                } catch (error) {
+                  console.error("Error explaining general topic:", error)
+                  showToast("Error", "Failed to explain general topic", "error")
+                }
+              }}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] leading-none">General </span>
+                <div className="flex gap-1 ml-2">
+                  <button className="bg-white/10 rounded-md px-1.5 py-1 text-[11px] leading-none text-white/70">
+                    {COMMAND_KEY}
+                  </button>
+                  <button className="bg-white/10 rounded-md px-1.5 py-1 text-[11px] leading-none text-white/70">
+                    G
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Direct Command - Only shows when context text is provided */}
+          {contextText.length > 0 && (
+            <div
+              className={`flex flex-col cursor-pointer rounded px-2 py-1.5 hover:bg-white/10 transition-colors ${
+                credits <= 0 ? "opacity-50 cursor-not-allowed" : ""
+              }`}
+              onClick={async () => {
+
+                try {
+                  const result =
+                    await window.electronAPI.triggerDirectAnswer(contextText)
+                  if (!result.success) {
+                    console.error(
+                      "Failed to get direct answer:",
+                      result.error
+                    )
+                    showToast("Error", "Failed to get direct answer", "error")
+                  }
+                } catch (error) {
+                  console.error("Error getting direct answer:", error)
+                  showToast("Error", "Failed to get direct answer", "error")
+                }
+              }}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] leading-none">Direct </span>
+                <div className="flex gap-1 ml-2">
+                  <button className="bg-white/10 rounded-md px-1.5 py-1 text-[11px] leading-none text-white/70">
+                    {COMMAND_KEY}
+                  </button>
+                  <button className="bg-white/10 rounded-md px-1.5 py-1 text-[11px] leading-none text-white/70">
+                    D
                   </button>
                 </div>
               </div>

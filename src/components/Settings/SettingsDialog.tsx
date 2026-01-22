@@ -50,14 +50,14 @@ const modelCategories: ModelCategory[] = [
     ],
     geminiModels: [
       {
-        id: "gemini-1.5-pro",
-        name: "Gemini 1.5 Pro",
-        description: "Best overall performance for problem extraction"
+        id: "gemini-2.5-flash",
+        name: "Gemini 2.5 Flash",
+        description: "Best price and performance with thinking capabilities"
       },
       {
-        id: "gemini-2.0-flash",
-        name: "Gemini 2.0 Flash",
-        description: "Faster, more cost-effective option"
+        id: "gemini-2.5-pro",
+        name: "Gemini 2.5 Pro",
+        description: "Advanced model for complex tasks"
       }
     ],
     anthropicModels: [
@@ -96,14 +96,14 @@ const modelCategories: ModelCategory[] = [
     ],
     geminiModels: [
       {
-        id: "gemini-1.5-pro",
-        name: "Gemini 1.5 Pro",
-        description: "Strong overall performance for coding tasks"
+        id: "gemini-2.5-flash",
+        name: "Gemini 2.5 Flash",
+        description: "Best price and performance with thinking capabilities"
       },
       {
-        id: "gemini-2.0-flash",
-        name: "Gemini 2.0 Flash",
-        description: "Faster, more cost-effective option"
+        id: "gemini-2.5-pro",
+        name: "Gemini 2.5 Pro",
+        description: "Advanced model for complex tasks"
       }
     ],
     anthropicModels: [
@@ -244,9 +244,9 @@ export function SettingsDialog({ open: externalOpen, onOpenChange }: SettingsDia
       setSolutionModel("gpt-4o");
       setDebuggingModel("gpt-4o");
     } else if (provider === "gemini") {
-      setExtractionModel("gemini-1.5-pro");
-      setSolutionModel("gemini-1.5-pro");
-      setDebuggingModel("gemini-1.5-pro");
+      setExtractionModel("gemini-2.5-flash");
+      setSolutionModel("gemini-2.5-flash");
+      setDebuggingModel("gemini-2.5-flash");
     } else if (provider === "anthropic") {
       setExtractionModel("claude-3-7-sonnet-20250219");
       setSolutionModel("claude-3-7-sonnet-20250219");
@@ -362,7 +362,7 @@ export function SettingsDialog({ open: externalOpen, onOpenChange }: SettingsDia
                   />
                   <div className="flex flex-col">
                     <p className="font-medium text-white text-sm">Gemini</p>
-                    <p className="text-xs text-white/60">Gemini 1.5 models</p>
+                    <p className="text-xs text-white/60">Gemini 2.0 models</p>
                   </div>
                 </div>
               </div>

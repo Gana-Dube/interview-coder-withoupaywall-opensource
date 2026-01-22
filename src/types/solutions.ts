@@ -32,6 +32,7 @@ export interface ProblemStatementData {
 export interface SolutionData {
   code: string;
   thoughts: string[];
+  explanation: string;
   time_complexity: string;
   space_complexity: string;
 }

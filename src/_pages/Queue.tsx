@@ -33,6 +33,8 @@ const Queue: React.FC<QueueProps> = ({
 
   const [isTooltipVisible, setIsTooltipVisible] = useState(false)
   const [tooltipHeight, setTooltipHeight] = useState(0)
+  const [contextText, setContextText] = useState("")
+  const [selectedScreenshots, setSelectedScreenshots] = useState<Set<string>>(new Set())
   const contentRef = useRef<HTMLDivElement>(null)
 
   const {
@@ -56,6 +58,12 @@ const Queue: React.FC<QueueProps> = ({
       )
 
       if (response.success) {
+        // Remove from selection if it was selected
+        setSelectedScreenshots(prev => {
+          const newSet = new Set(prev)
+          newSet.delete(screenshotToDelete.path)
+          return newSet
+        })
         refetch() // Refetch screenshots instead of managing state directly
       } else {
         console.error("Failed to delete screenshot:", response.error)
@@ -64,6 +72,18 @@ const Queue: React.FC<QueueProps> = ({
     } catch (error) {
       console.error("Error deleting screenshot:", error)
     }
+  }
+
+  const handleToggleScreenshotSelection = (path: string) => {
+    setSelectedScreenshots(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(path)) {
+        newSet.delete(path)
+      } else {
+        newSet.add(path)
+      }
+      return newSet
+    })
   }
 
   useEffect(() => {
@@ -144,7 +164,36 @@ const Queue: React.FC<QueueProps> = ({
             isLoading={false}
             screenshots={screenshots}
             onDeleteScreenshot={handleDeleteScreenshot}
+            selectedScreenshots={selectedScreenshots}
+            onToggleSelection={handleToggleScreenshotSelection}
           />
+
+          {/* Context Text Input */}
+          <div className="bg-black/60 rounded-lg p-3 backdrop-blur-md border border-white/10">
+            <label className="text-xs text-white/90 font-medium block mb-2">
+              Context (Paste text instead of screenshots)
+            </label>
+            <textarea
+              value={contextText}
+              onChange={(e) => setContextText(e.target.value)}
+              placeholder="Paste your problem, question, or any text here...&#10;This works with Solve, Explain, and General modes."
+              className="w-full min-w-[400px] h-24 bg-black/40 text-white text-sm rounded border border-white/20 focus:border-white/40 focus:outline-none px-3 py-2 resize-none placeholder-white/40"
+              style={{ lineHeight: '1.5' }}
+            />
+            {contextText.length > 0 && (
+              <div className="flex items-center justify-between mt-2">
+                <span className="text-[10px] text-white/50">
+                  {contextText.length} characters
+                </span>
+                <button
+                  onClick={() => setContextText("")}
+                  className="text-[10px] text-red-400 hover:text-red-300 transition-colors px-2 py-1 rounded hover:bg-white/10"
+                >
+                  Clear
+                </button>
+              </div>
+            )}
+          </div>
 
           <QueueCommands
             onTooltipVisibilityChange={handleTooltipVisibilityChange}
@@ -152,6 +201,8 @@ const Queue: React.FC<QueueProps> = ({
             credits={credits}
             currentLanguage={currentLanguage}
             setLanguage={setLanguage}
+            contextText={contextText}
+            selectedScreenshotPaths={Array.from(selectedScreenshots)}
           />
         </div>
       </div>

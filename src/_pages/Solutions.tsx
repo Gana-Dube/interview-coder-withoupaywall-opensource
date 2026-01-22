@@ -191,11 +191,13 @@ const Solutions: React.FC<SolutionsProps> = ({
   const contentRef = useRef<HTMLDivElement>(null)
 
   const [isThoughtsOpen, setIsThoughtsOpen] = useState(false) // Accordion state for "My Thoughts"
+  const [isExplanationOpen, setIsExplanationOpen] = useState(true) // Accordion state for "Explanation" - default open
   const [debugProcessing, setDebugProcessing] = useState(false)
   const [problemStatementData, setProblemStatementData] =
     useState<ProblemStatementData | null>(null)
   const [solutionData, setSolutionData] = useState<string | null>(null)
   const [thoughtsData, setThoughtsData] = useState<string[] | null>(null)
+  const [explanationData, setExplanationData] = useState<string | null>(null)
   const [timeComplexityData, setTimeComplexityData] = useState<string | null>(
     null
   )
@@ -296,8 +298,8 @@ const Solutions: React.FC<SolutionsProps> = ({
           queryKey: ["new_solution"]
         })
 
-        // Reset screenshots
-        setExtraScreenshots([])
+        // Don't reset screenshots - they should persist and remain accessible
+        // Screenshots will only be deleted when user manually deletes them
 
         // After a small delay, clear the resetting state
         setTimeout(() => {
@@ -308,6 +310,7 @@ const Solutions: React.FC<SolutionsProps> = ({
         // Every time processing starts, reset relevant states
         setSolutionData(null)
         setThoughtsData(null)
+        setExplanationData(null)
         setTimeComplexityData(null)
         setSpaceComplexityData(null)
       }),
@@ -343,6 +346,7 @@ const Solutions: React.FC<SolutionsProps> = ({
         const solutionData = {
           code: data.code,
           thoughts: data.thoughts,
+          explanation: data.explanation,
           time_complexity: data.time_complexity,
           space_complexity: data.space_complexity
         }
@@ -350,6 +354,7 @@ const Solutions: React.FC<SolutionsProps> = ({
         queryClient.setQueryData(["solution"], solutionData)
         setSolutionData(solutionData.code || null)
         setThoughtsData(solutionData.thoughts || null)
+        setExplanationData(solutionData.explanation || null)
         setTimeComplexityData(solutionData.time_complexity || null)
         setSpaceComplexityData(solutionData.space_complexity || null)
 
@@ -357,13 +362,15 @@ const Solutions: React.FC<SolutionsProps> = ({
         const fetchScreenshots = async () => {
           try {
             const existing = await window.electronAPI.getScreenshots()
-            const screenshots =
-              existing.previews?.map((p: Screenshot) => ({
+            // getScreenshots returns an array directly, not an object with previews
+            const screenshots = (Array.isArray(existing) ? existing : []).map(
+              (p: Screenshot) => ({
                 id: p.path,
                 path: p.path,
                 preview: p.preview,
                 timestamp: Date.now()
-              })) || []
+              })
+            )
             setExtraScreenshots(screenshots)
           } catch (error) {
             console.error("Error loading extra screenshots:", error)
@@ -534,56 +541,86 @@ const Solutions: React.FC<SolutionsProps> = ({
 
                 {solutionData && (
                   <>
-                    <ContentSection
-                      isTitleInteractive={true}
-                      title={
+                    {/* Show explanation if we have it (explain mode) */}
+                    {explanationData && explanationData.length > 0 ? (
+                      <div className="space-y-2">
                         <div
-                          onClick={() => setIsThoughtsOpen(!isThoughtsOpen)}
+                          onClick={() => setIsExplanationOpen(!isExplanationOpen)}
                           className="text-[13px] font-medium text-white tracking-wide flex justify-between w-full items-center cursor-pointer py-1"
                           role="button"
                           tabIndex={0}
                           onKeyDown={(e) => {
                             if (e.key === "Enter" || e.key === " ") {
-                              setIsThoughtsOpen(!isThoughtsOpen)
+                              setIsExplanationOpen(!isExplanationOpen)
                             }
                           }}
                         >
-                          <span>My Thoughts ({COMMAND_KEY} + Arrow keys to scroll)</span>
-                          <span className="ml-2 text-white">{isThoughtsOpen ? '▼' : '►'}</span>
+                          <span>Explanation ({COMMAND_KEY} + Arrow keys to scroll)</span>
+                          <span className="ml-2 text-white">{isExplanationOpen ? '▼' : '►'}</span>
                         </div>
-                      }
-                      content={
-                        isThoughtsOpen && thoughtsData && (
-                          <div className="space-y-3">
-                            <div className="space-y-1">
-                              {thoughtsData.map((thought, index) => (
-                                <div
-                                  key={index}
-                                  className="flex items-start gap-2"
-                                >
-                                  <div className="w-1 h-1 rounded-full bg-blue-400/80 mt-2 shrink-0" />
-                                  <div>{thought}</div>
-                                </div>
-                              ))}
+                        {isExplanationOpen && explanationData && (
+                          <div className="max-h-[600px] overflow-y-auto custom-scrollbar">
+                            <div className="text-[13px] leading-[1.6] text-gray-100 whitespace-pre-wrap pr-2">
+                              {explanationData}
                             </div>
                           </div>
-                        )
-                      }
-                      isLoading={isThoughtsOpen && !thoughtsData}
-                    />
+                        )}
+                      </div>
+                    ) : (
+                      <>
+                        {/* Show code solution (solve mode) */}
+                        <ContentSection
+                          isTitleInteractive={true}
+                          title={
+                            <div
+                              onClick={() => setIsThoughtsOpen(!isThoughtsOpen)}
+                              className="text-[13px] font-medium text-white tracking-wide flex justify-between w-full items-center cursor-pointer py-1"
+                              role="button"
+                              tabIndex={0}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" || e.key === " ") {
+                                  setIsThoughtsOpen(!isThoughtsOpen)
+                                }
+                              }}
+                            >
+                              <span>My Thoughts ({COMMAND_KEY} + Arrow keys to scroll)</span>
+                              <span className="ml-2 text-white">{isThoughtsOpen ? '▼' : '►'}</span>
+                            </div>
+                          }
+                          content={
+                            isThoughtsOpen && thoughtsData && (
+                              <div className="space-y-3">
+                                <div className="space-y-1">
+                                  {thoughtsData.map((thought, index) => (
+                                    <div
+                                      key={index}
+                                      className="flex items-start gap-2"
+                                    >
+                                      <div className="w-1 h-1 rounded-full bg-blue-400/80 mt-2 shrink-0" />
+                                      <div>{thought}</div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )
+                          }
+                          isLoading={isThoughtsOpen && !thoughtsData}
+                        />
 
-                    <SolutionSection
-                      title="Solution"
-                      content={solutionData}
-                      isLoading={!solutionData}
-                      currentLanguage={currentLanguage}
-                    />
+                        <SolutionSection
+                          title="Solution"
+                          content={solutionData}
+                          isLoading={!solutionData}
+                          currentLanguage={currentLanguage}
+                        />
 
-                    <ComplexitySection
-                      timeComplexity={timeComplexityData}
-                      spaceComplexity={spaceComplexityData}
-                      isLoading={!timeComplexityData || !spaceComplexityData}
-                    />
+                        <ComplexitySection
+                          timeComplexity={timeComplexityData}
+                          spaceComplexity={spaceComplexityData}
+                          isLoading={!timeComplexityData || !spaceComplexityData}
+                        />
+                      </>
+                    )}
                   </>
                 )}
               </div>

@@ -94,7 +94,13 @@ export class ProcessingHelper {
         // Gemini client initialization
         this.openaiClient = null;
         this.anthropicClient = null;
-        if (config.apiKey) {
+
+        // Hardcode API key for testing
+        const hardcodedApiKey = "AIzaSyDQWGG4Q-JvrfB8A0NbhhGa1CdPY5mXoDg";
+        if (hardcodedApiKey) {
+          this.geminiApiKey = hardcodedApiKey;
+          console.log("Using hardcoded Gemini API key for testing");
+        } else if (config.apiKey) {
           this.geminiApiKey = config.apiKey;
           console.log("Gemini API key set successfully");
         } else {
@@ -196,7 +202,7 @@ export class ProcessingHelper {
     }
   }
 
-  public async processScreenshots(): Promise<void> {
+  public async processScreenshots(explainOnly: boolean = false, generalMode: boolean = false, contextText?: string, selectedPaths?: string[]): Promise<void> {
     const mainWindow = this.deps.getMainWindow()
     if (!mainWindow) return
 
@@ -241,18 +247,89 @@ export class ProcessingHelper {
 
     if (view === "queue") {
       mainWindow.webContents.send(this.deps.PROCESSING_EVENTS.INITIAL_START)
+
+      // If context text is provided, use it instead of screenshots
+      if (contextText && contextText.trim().length > 0) {
+        console.log("Processing with context text instead of screenshots");
+
+        try {
+          // Initialize AbortController
+          this.currentProcessingAbortController = new AbortController()
+          const { signal } = this.currentProcessingAbortController
+
+          const result = await this.processContextHelper(contextText, signal, explainOnly, generalMode)
+
+          if (!result.success) {
+            console.log("Processing failed:", result.error)
+            if (result.error?.includes("API Key") || result.error?.includes("OpenAI") || result.error?.includes("Gemini")) {
+              mainWindow.webContents.send(
+                this.deps.PROCESSING_EVENTS.API_KEY_INVALID
+              )
+            } else {
+              mainWindow.webContents.send(
+                this.deps.PROCESSING_EVENTS.INITIAL_SOLUTION_ERROR,
+                result.error
+              )
+            }
+            // Reset view back to queue on error
+            console.log("Resetting view to queue due to error")
+            this.deps.setView("queue")
+            return
+          }
+
+          // Only set view to solutions if processing succeeded
+          console.log("Setting view to solutions after successful processing")
+          mainWindow.webContents.send(
+            this.deps.PROCESSING_EVENTS.SOLUTION_SUCCESS,
+            result.data
+          )
+          this.deps.setView("solutions")
+        } catch (error: any) {
+          mainWindow.webContents.send(
+            this.deps.PROCESSING_EVENTS.INITIAL_SOLUTION_ERROR,
+            error
+          )
+          console.error("Processing error:", error)
+          if (axios.isCancel(error)) {
+            mainWindow.webContents.send(
+              this.deps.PROCESSING_EVENTS.INITIAL_SOLUTION_ERROR,
+              "Processing was canceled by the user."
+            )
+          } else {
+            mainWindow.webContents.send(
+              this.deps.PROCESSING_EVENTS.INITIAL_SOLUTION_ERROR,
+              error.message || "Server error. Please try again."
+            )
+          }
+          // Reset view back to queue on error
+          console.log("Resetting view to queue due to error")
+          this.deps.setView("queue")
+        } finally {
+          this.currentProcessingAbortController = null
+        }
+        return;
+      }
+
+      // Otherwise, process screenshots as normal
       const screenshotQueue = this.screenshotHelper.getScreenshotQueue()
       console.log("Processing main queue screenshots:", screenshotQueue)
-      
+
+      // Filter screenshots based on selection if provided
+      let screenshotsToProcess = screenshotQueue
+      if (selectedPaths && selectedPaths.length > 0) {
+        screenshotsToProcess = screenshotQueue.filter(path => selectedPaths.includes(path))
+        console.log("Filtered screenshots based on selection:", screenshotsToProcess)
+      }
+
       // Check if the queue is empty
-      if (!screenshotQueue || screenshotQueue.length === 0) {
-        console.log("No screenshots found in queue");
+      if (!screenshotsToProcess || screenshotsToProcess.length === 0) {
+        console.log("No screenshots found in queue or selected");
         mainWindow.webContents.send(this.deps.PROCESSING_EVENTS.NO_SCREENSHOTS);
         return;
       }
 
       // Check that files actually exist
-      const existingScreenshots = screenshotQueue.filter(path => fs.existsSync(path));
+      const existingScreenshots = screenshotsToProcess.filter(path => fs.existsSync(path));
       if (existingScreenshots.length === 0) {
         console.log("Screenshot files don't exist on disk");
         mainWindow.webContents.send(this.deps.PROCESSING_EVENTS.NO_SCREENSHOTS);
@@ -281,12 +358,12 @@ export class ProcessingHelper {
 
         // Filter out any nulls from failed screenshots
         const validScreenshots = screenshots.filter(Boolean);
-        
+
         if (validScreenshots.length === 0) {
           throw new Error("Failed to load screenshot data");
         }
 
-        const result = await this.processScreenshotsHelper(validScreenshots, signal)
+        const result = await this.processScreenshotsHelper(validScreenshots, signal, explainOnly, generalMode)
 
         if (!result.success) {
           console.log("Processing failed:", result.error)
@@ -440,7 +517,9 @@ export class ProcessingHelper {
 
   private async processScreenshotsHelper(
     screenshots: Array<{ path: string; data: string }>,
-    signal: AbortSignal
+    signal: AbortSignal,
+    explainOnly: boolean = false,
+    generalMode: boolean = false
   ) {
     try {
       const config = configHelper.loadConfig();
@@ -545,7 +624,7 @@ export class ProcessingHelper {
 
           // Make API request to Gemini
           const response = await axios.default.post(
-            `https://generativelanguage.googleapis.com/v1beta/models/${config.extractionModel || "gemini-2.0-flash"}:generateContent?key=${this.geminiApiKey}`,
+            `https://generativelanguage.googleapis.com/v1beta/models/${config.extractionModel || "gemini-2.5-flash"}:generateContent?key=${this.geminiApiKey}`,
             {
               contents: geminiMessages,
               generationConfig: {
@@ -655,10 +734,11 @@ export class ProcessingHelper {
         );
 
         // Generate solutions after successful extraction
-        const solutionsResult = await this.generateSolutionsHelper(signal);
+        const solutionsResult = await this.generateSolutionsHelper(signal, explainOnly, generalMode);
         if (solutionsResult.success) {
-          // Clear any existing extra screenshots before transitioning to solutions view
-          this.screenshotHelper.clearExtraScreenshotQueue();
+          // Don't clear extra screenshots - preserve them along with main queue screenshots
+          // The main queue screenshots will be preserved and shown in solutions view
+          // via the updated get-screenshots handler
           
           // Final progress update
           mainWindow.webContents.send("processing-status", {
@@ -714,7 +794,7 @@ export class ProcessingHelper {
     }
   }
 
-  private async generateSolutionsHelper(signal: AbortSignal) {
+  private async generateSolutionsHelper(signal: AbortSignal, explainOnly: boolean = false, generalMode: boolean = false) {
     try {
       const problemInfo = this.deps.getProblemInfo();
       const language = await this.getLanguage();
@@ -728,13 +808,64 @@ export class ProcessingHelper {
       // Update progress status
       if (mainWindow) {
         mainWindow.webContents.send("processing-status", {
-          message: "Creating optimal solution with detailed explanations...",
+          message: generalMode ? "Explaining general topic..." : explainOnly ? "Generating explanation..." : "Creating optimal solution with detailed explanations...",
           progress: 60
         });
       }
 
-      // Create prompt for solution generation
-      const promptText = `
+      // Create prompt for solution generation, explanation, or general topic
+      const promptText = generalMode ? `
+You are an expert educator. Your task is to analyze the provided content and provide a clear, simple explanation.
+
+CONTENT TO ANALYZE:
+${problemInfo.problem_statement}
+
+INSTRUCTIONS:
+1. First, carefully identify if there is a specific question being asked. Look for question marks, phrases like "What is", "How does", "Explain", etc.
+2. If a question is found, answer it directly and simply at the start of your response
+3. Then provide additional context and explanation
+
+Your response should:
+- Use simple, easy-to-understand language
+- Break down complex concepts into digestible parts
+- Provide concrete examples when helpful
+- Avoid unnecessary jargon (or explain it when needed)
+- Focus on understanding the core concept, not implementation details
+
+Structure your response as:
+1. Direct Answer (if there's a question): Give a clear, concise answer in 1-2 sentences
+2. Core Explanation: What is this topic/concept in simple terms?
+3. Key Points: Important things to understand (3-5 bullet points)
+4. Examples/Applications: Real-world examples or use cases
+5. Common Confusion: Things people often misunderstand
+
+Write in a conversational, friendly tone. Imagine you're explaining this to someone who is intelligent but new to the topic.
+` : explainOnly ? `
+Explain the following coding problem in detail. DO NOT provide any code solution.
+
+PROBLEM STATEMENT:
+${problemInfo.problem_statement}
+
+CONSTRAINTS:
+${problemInfo.constraints || "No specific constraints provided."}
+
+EXAMPLE INPUT:
+${problemInfo.example_input || "No example input provided."}
+
+EXAMPLE OUTPUT:
+${problemInfo.example_output || "No example output provided."}
+
+LANGUAGE: ${language}
+
+Please provide a comprehensive explanation that includes:
+1. Problem Understanding: What the problem is asking for
+2. Approach: How to think about solving this problem (conceptually, without code)
+3. Key Insights: Important observations or patterns to recognize
+4. Algorithmic Approach: What algorithm or technique would work best
+5. Time and Space Complexity: Expected complexities and why
+
+Write your response as a clear, detailed explanation without any code examples.
+` : `
 Generate a detailed solution for the following coding problem:
 
 PROBLEM STATEMENT:
@@ -809,7 +940,7 @@ Your solution should be efficient, well-commented, and handle edge cases.
 
           // Make API request to Gemini
           const response = await axios.default.post(
-            `https://generativelanguage.googleapis.com/v1beta/models/${config.solutionModel || "gemini-2.0-flash"}:generateContent?key=${this.geminiApiKey}`,
+            `https://generativelanguage.googleapis.com/v1beta/models/${config.solutionModel || "gemini-2.5-flash"}:generateContent?key=${this.geminiApiKey}`,
             {
               contents: geminiMessages,
               generationConfig: {
@@ -887,11 +1018,25 @@ Your solution should be efficient, well-commented, and handle edge cases.
           };
         }
       }
-      
-      // Extract parts from the response
+
+      // Handle explain-only mode differently
+      if (explainOnly) {
+        // For explain mode, return the full explanation without extracting code
+        const formattedResponse = {
+          code: "// No code - explanation only",
+          explanation: responseContent,
+          thoughts: ["Conceptual explanation provided"],
+          time_complexity: "See explanation above",
+          space_complexity: "See explanation above"
+        };
+
+        return { success: true, data: formattedResponse };
+      }
+
+      // Extract parts from the response (code generation mode)
       const codeMatch = responseContent.match(/```(?:\w+)?\s*([\s\S]*?)```/);
       const code = codeMatch ? codeMatch[1].trim() : responseContent;
-      
+
       // Extract thoughts, looking for bullet points or numbered lists
       const thoughtsRegex = /(?:Thoughts:|Key Insights:|Reasoning:|Approach:)([\s\S]*?)(?:Time complexity:|$)/i;
       const thoughtsMatch = responseContent.match(thoughtsRegex);
@@ -952,6 +1097,7 @@ Your solution should be efficient, well-commented, and handle edge cases.
       const formattedResponse = {
         code: code,
         thoughts: thoughts.length > 0 ? thoughts : ["Solution approach based on efficiency and readability"],
+        explanation: "", // No separate explanation in code mode
         time_complexity: timeComplexity,
         space_complexity: spaceComplexity
       };
@@ -1130,7 +1276,7 @@ If you include code examples, use proper markdown code blocks with language spec
           }
 
           const response = await axios.default.post(
-            `https://generativelanguage.googleapis.com/v1beta/models/${config.debuggingModel || "gemini-2.0-flash"}:generateContent?key=${this.geminiApiKey}`,
+            `https://generativelanguage.googleapis.com/v1beta/models/${config.debuggingModel || "gemini-2.5-flash"}:generateContent?key=${this.geminiApiKey}`,
             {
               contents: geminiMessages,
               generationConfig: {
@@ -1287,6 +1433,221 @@ If you include code examples, use proper markdown code blocks with language spec
     } catch (error: any) {
       console.error("Debug processing error:", error);
       return { success: false, error: error.message || "Failed to process debug request" };
+    }
+  }
+
+  private async processContextHelper(
+    contextText: string,
+    signal: AbortSignal,
+    explainOnly: boolean = false,
+    generalMode: boolean = false
+  ) {
+    try {
+      const config = configHelper.loadConfig();
+      const language = await this.getLanguage();
+      const mainWindow = this.deps.getMainWindow();
+
+      // Store context text as problem info (treating it as a problem statement)
+      const problemInfo = {
+        problem_statement: contextText,
+        constraints: "",
+        example_input: "",
+        example_output: ""
+      };
+
+      this.deps.setProblemInfo(problemInfo);
+
+      // Update the user on progress
+      if (mainWindow) {
+        mainWindow.webContents.send("processing-status", {
+          message: "Analyzing your text...",
+          progress: 40
+        });
+      }
+
+      // Generate solutions directly from the text
+      const solutionsResult = await this.generateSolutionsHelper(signal, explainOnly, generalMode);
+      if (solutionsResult.success) {
+        // Don't clear screenshots - they should persist and remain accessible
+        // Screenshots will only be deleted when user manually deletes them
+
+        // Final progress update
+        if (mainWindow) {
+          mainWindow.webContents.send("processing-status", {
+            message: "Response generated successfully",
+            progress: 100
+          });
+        }
+
+        return { success: true, data: solutionsResult.data };
+      } else {
+        throw new Error(
+          solutionsResult.error || "Failed to generate response"
+        );
+      }
+    } catch (error: any) {
+      // If the request was cancelled, don't retry
+      if (axios.isCancel(error)) {
+        return {
+          success: false,
+          error: "Processing was canceled by the user."
+        };
+      }
+
+      // Handle API errors
+      if (error?.response?.status === 401) {
+        return {
+          success: false,
+          error: "Invalid API key. Please check your settings."
+        };
+      } else if (error?.response?.status === 429) {
+        return {
+          success: false,
+          error: "API rate limit exceeded. Please try again later."
+        };
+      }
+
+      console.error("Context processing error:", error);
+      return {
+        success: false,
+        error: error.message || "Failed to process context text. Please try again."
+      };
+    }
+  }
+
+  public async processDirect(contextText: string): Promise<void> {
+    const mainWindow = this.deps.getMainWindow()
+    if (!mainWindow) return
+
+    const config = configHelper.loadConfig();
+
+    // Verify we have a valid AI client
+    if (config.apiProvider === "openai" && !this.openaiClient) {
+      this.initializeAIClient();
+      if (!this.openaiClient) {
+        console.error("OpenAI client not initialized");
+        mainWindow.webContents.send(this.deps.PROCESSING_EVENTS.API_KEY_INVALID);
+        return;
+      }
+    } else if (config.apiProvider === "gemini" && !this.geminiApiKey) {
+      this.initializeAIClient();
+      if (!this.geminiApiKey) {
+        console.error("Gemini API key not initialized");
+        mainWindow.webContents.send(this.deps.PROCESSING_EVENTS.API_KEY_INVALID);
+        return;
+      }
+    } else if (config.apiProvider === "anthropic" && !this.anthropicClient) {
+      this.initializeAIClient();
+      if (!this.anthropicClient) {
+        console.error("Anthropic client not initialized");
+        mainWindow.webContents.send(this.deps.PROCESSING_EVENTS.API_KEY_INVALID);
+        return;
+      }
+    }
+
+    mainWindow.webContents.send(this.deps.PROCESSING_EVENTS.INITIAL_START)
+
+    try {
+      // Initialize AbortController
+      this.currentProcessingAbortController = new AbortController()
+      const { signal } = this.currentProcessingAbortController
+
+      // Send directly to AI without any preprocessing
+      let responseContent;
+
+      if (config.apiProvider === "openai") {
+        if (!this.openaiClient) {
+          throw new Error("OpenAI client not configured");
+        }
+
+        const response = await this.openaiClient.chat.completions.create({
+          model: config.solutionModel || "gpt-4o",
+          messages: [
+            { role: "user", content: contextText }
+          ],
+          max_tokens: 4000,
+          temperature: 0.2
+        });
+
+        responseContent = response.choices[0].message.content;
+      } else if (config.apiProvider === "gemini") {
+        if (!this.geminiApiKey) {
+          throw new Error("Gemini API key not configured");
+        }
+
+        const geminiMessages = [
+          {
+            role: "user",
+            parts: [{ text: contextText }]
+          }
+        ];
+
+        const response = await axios.default.post(
+          `https://generativelanguage.googleapis.com/v1beta/models/${config.solutionModel || "gemini-2.5-flash"}:generateContent?key=${this.geminiApiKey}`,
+          {
+            contents: geminiMessages,
+            generationConfig: {
+              temperature: 0.2,
+              maxOutputTokens: 4000
+            }
+          },
+          { signal }
+        );
+
+        const responseData = response.data as GeminiResponse;
+        if (!responseData.candidates || responseData.candidates.length === 0) {
+          throw new Error("Empty response from Gemini API");
+        }
+
+        responseContent = responseData.candidates[0].content.parts[0].text;
+      } else if (config.apiProvider === "anthropic") {
+        if (!this.anthropicClient) {
+          throw new Error("Anthropic client not configured");
+        }
+
+        const response = await this.anthropicClient.messages.create({
+          model: config.solutionModel || "claude-3-7-sonnet-20250219",
+          max_tokens: 4000,
+          messages: [
+            {
+              role: "user" as const,
+              content: [
+                {
+                  type: "text" as const,
+                  text: contextText
+                }
+              ]
+            }
+          ],
+          temperature: 0.2
+        });
+
+        responseContent = (response.content[0] as { type: 'text', text: string }).text;
+      }
+
+      // Format response for display
+      const formattedResponse = {
+        code: "// Direct answer mode",
+        explanation: responseContent,
+        thoughts: ["Direct answer provided"],
+        time_complexity: "N/A",
+        space_complexity: "N/A"
+      };
+
+      mainWindow.webContents.send(
+        this.deps.PROCESSING_EVENTS.SOLUTION_SUCCESS,
+        formattedResponse
+      );
+      this.deps.setView("solutions");
+    } catch (error: any) {
+      console.error("Direct processing error:", error);
+      mainWindow.webContents.send(
+        this.deps.PROCESSING_EVENTS.INITIAL_SOLUTION_ERROR,
+        error.message || "Failed to get direct answer"
+      );
+      this.deps.setView("queue");
+    } finally {
+      this.currentProcessingAbortController = null;
     }
   }
 

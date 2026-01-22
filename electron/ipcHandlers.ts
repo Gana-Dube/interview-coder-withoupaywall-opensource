@@ -135,9 +135,14 @@ export function initializeIpcHandlers(deps: IIpcHandlerDeps): void {
           }))
         )
       } else {
+        // In solutions/debug view, return both main queue and extra queue screenshots
+        // This preserves the original screenshots used for processing
+        const mainQueue = deps.getScreenshotQueue()
         const extraQueue = deps.getExtraScreenshotQueue()
+        const allPaths = [...mainQueue, ...extraQueue]
+        
         previews = await Promise.all(
-          extraQueue.map(async (path) => ({
+          allPaths.map(async (path) => ({
             path,
             preview: await deps.getImagePreview(path)
           }))
@@ -232,7 +237,7 @@ export function initializeIpcHandlers(deps: IIpcHandlerDeps): void {
   })
 
   // Process screenshot handlers
-  ipcMain.handle("trigger-process-screenshots", async () => {
+  ipcMain.handle("trigger-process-screenshots", async (_event, contextText?: string, selectedPaths?: string[]) => {
     try {
       // Check for API key before processing
       if (!configHelper.hasApiKey()) {
@@ -242,12 +247,73 @@ export function initializeIpcHandlers(deps: IIpcHandlerDeps): void {
         }
         return { success: false, error: "API key required" };
       }
-      
-      await deps.processingHelper?.processScreenshots()
+
+      await deps.processingHelper?.processScreenshots(false, false, contextText, selectedPaths) // false = generate code
       return { success: true }
     } catch (error) {
       console.error("Error processing screenshots:", error)
       return { error: "Failed to process screenshots" }
+    }
+  })
+
+  // Explain screenshots handler (no code generation)
+  ipcMain.handle("trigger-explain-screenshots", async (_event, contextText?: string, selectedPaths?: string[]) => {
+    try {
+      // Check for API key before processing
+      if (!configHelper.hasApiKey()) {
+        const mainWindow = deps.getMainWindow();
+        if (mainWindow) {
+          mainWindow.webContents.send(deps.PROCESSING_EVENTS.API_KEY_INVALID);
+        }
+        return { success: false, error: "API key required" };
+      }
+
+      await deps.processingHelper?.processScreenshots(true, false, contextText, selectedPaths) // true = explain only
+      return { success: true }
+    } catch (error) {
+      console.error("Error explaining screenshots:", error)
+      return { error: "Failed to explain screenshots" }
+    }
+  })
+
+  // General explanation handler (topic/concept explanation)
+  ipcMain.handle("trigger-general-screenshots", async (_event, contextText?: string, selectedPaths?: string[]) => {
+    try {
+      // Check for API key before processing
+      if (!configHelper.hasApiKey()) {
+        const mainWindow = deps.getMainWindow();
+        if (mainWindow) {
+          mainWindow.webContents.send(deps.PROCESSING_EVENTS.API_KEY_INVALID);
+        }
+        return { success: false, error: "API key required" };
+      }
+
+      await deps.processingHelper?.processScreenshots(true, true, contextText, selectedPaths) // (explainOnly=true, generalMode=true)
+      return { success: true }
+    } catch (error) {
+      console.error("Error explaining general topic:", error)
+      return { error: "Failed to explain general topic" }
+    }
+  })
+
+  // Direct answer handler (no preprocessing, straight to AI)
+  ipcMain.handle("trigger-direct-answer", async (_event, contextText: string) => {
+    try {
+      // Check for API key before processing
+      if (!configHelper.hasApiKey()) {
+        const mainWindow = deps.getMainWindow();
+        if (mainWindow) {
+          mainWindow.webContents.send(deps.PROCESSING_EVENTS.API_KEY_INVALID);
+        }
+        return { success: false, error: "API key required" };
+      }
+
+      // Call processDirect method which bypasses problem extraction
+      await deps.processingHelper?.processDirect(contextText)
+      return { success: true }
+    } catch (error) {
+      console.error("Error getting direct answer:", error)
+      return { error: "Failed to get direct answer" }
     }
   })
 
@@ -257,8 +323,8 @@ export function initializeIpcHandlers(deps: IIpcHandlerDeps): void {
       // First cancel any ongoing requests
       deps.processingHelper?.cancelOngoingRequests()
 
-      // Clear all queues immediately
-      deps.clearQueues()
+      // Don't clear screenshots - they should only be deleted manually
+      // Screenshots will persist and remain accessible
 
       // Reset view to queue
       deps.setView("queue")

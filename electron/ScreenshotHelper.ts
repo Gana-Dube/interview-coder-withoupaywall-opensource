@@ -56,45 +56,67 @@ export class ScreenshotHelper {
   }
   
   // This method replaces loadExistingScreenshots() to ensure we start with empty queues
+  // Modified to preserve screenshots - only clean very old files (older than 24 hours)
   private cleanScreenshotDirectories(): void {
     try {
-      // Clean main screenshots directory
+      const now = Date.now();
+      const maxAge = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+      
+      // Clean old main screenshots (older than 24 hours) and load recent ones
       if (fs.existsSync(this.screenshotDir)) {
         const files = fs.readdirSync(this.screenshotDir)
           .filter(file => file.endsWith('.png'))
-          .map(file => path.join(this.screenshotDir, file));
+          .map(file => ({
+            path: path.join(this.screenshotDir, file),
+            mtime: fs.statSync(path.join(this.screenshotDir, file)).mtimeMs
+          }))
+          .sort((a, b) => b.mtime - a.mtime); // Sort by modification time, newest first
         
-        // Delete each screenshot file
-        for (const file of files) {
+        for (const fileInfo of files) {
           try {
-            fs.unlinkSync(file);
-            console.log(`Deleted existing screenshot: ${file}`);
+            const age = now - fileInfo.mtime;
+            if (age > maxAge) {
+              fs.unlinkSync(fileInfo.path);
+              console.log(`Deleted old screenshot: ${fileInfo.path}`);
+            } else if (this.screenshotQueue.length < this.MAX_SCREENSHOTS) {
+              // Load existing screenshot into queue if it's recent and we have space
+              this.screenshotQueue.push(fileInfo.path);
+            }
           } catch (err) {
-            console.error(`Error deleting screenshot ${file}:`, err);
+            console.error(`Error processing screenshot ${fileInfo.path}:`, err);
           }
         }
       }
       
-      // Clean extra screenshots directory
+      // Clean old extra screenshots (older than 24 hours) and load recent ones
       if (fs.existsSync(this.extraScreenshotDir)) {
         const files = fs.readdirSync(this.extraScreenshotDir)
           .filter(file => file.endsWith('.png'))
-          .map(file => path.join(this.extraScreenshotDir, file));
+          .map(file => ({
+            path: path.join(this.extraScreenshotDir, file),
+            mtime: fs.statSync(path.join(this.extraScreenshotDir, file)).mtimeMs
+          }))
+          .sort((a, b) => b.mtime - a.mtime); // Sort by modification time, newest first
         
-        // Delete each screenshot file
-        for (const file of files) {
+        for (const fileInfo of files) {
           try {
-            fs.unlinkSync(file);
-            console.log(`Deleted existing extra screenshot: ${file}`);
+            const age = now - fileInfo.mtime;
+            if (age > maxAge) {
+              fs.unlinkSync(fileInfo.path);
+              console.log(`Deleted old extra screenshot: ${fileInfo.path}`);
+            } else if (this.extraScreenshotQueue.length < this.MAX_SCREENSHOTS) {
+              // Load existing screenshot into extra queue if it's recent and we have space
+              this.extraScreenshotQueue.push(fileInfo.path);
+            }
           } catch (err) {
-            console.error(`Error deleting extra screenshot ${file}:`, err);
+            console.error(`Error processing extra screenshot ${fileInfo.path}:`, err);
           }
         }
       }
       
-      console.log("Screenshot directories cleaned successfully");
+      console.log("Screenshot directories processed successfully");
     } catch (err) {
-      console.error("Error cleaning screenshot directories:", err);
+      console.error("Error processing screenshot directories:", err);
     }
   }
 

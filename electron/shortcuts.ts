@@ -53,21 +53,38 @@ export class ShortcutsHelper {
     })
 
     globalShortcut.register("CommandOrControl+Enter", async () => {
-      await this.deps.processingHelper?.processScreenshots()
+      await this.deps.processingHelper?.processScreenshots(false, false) // Solve mode: generate code
+    })
+
+    globalShortcut.register("CommandOrControl+E", async () => {
+      console.log("Command/Ctrl + E pressed. Explaining algorithm...")
+      await this.deps.processingHelper?.processScreenshots(true, false) // Explain mode: algorithm explanation
+    })
+
+    globalShortcut.register("CommandOrControl+G", async () => {
+      console.log("Command/Ctrl + G pressed. General explanation...")
+      await this.deps.processingHelper?.processScreenshots(true, true) // General mode: concept explanation
+    })
+
+    globalShortcut.register("CommandOrControl+D", async () => {
+      console.log("Command/Ctrl + D pressed. Direct answer mode...")
+      // Note: Direct mode requires context text, which isn't available from global shortcuts
+      // This shortcut will only work when triggered from the UI with context text
+      // The actual processing happens through the IPC handler trigger-direct-answer
     })
 
     globalShortcut.register("CommandOrControl+R", () => {
       console.log(
-        "Command + R pressed. Canceling requests and resetting queues..."
+        "Command + R pressed. Canceling requests and resetting view..."
       )
 
       // Cancel ongoing API requests
       this.deps.processingHelper?.cancelOngoingRequests()
 
-      // Clear both screenshot queues
-      this.deps.clearQueues()
+      // Don't clear screenshots - they should only be deleted manually
+      // Screenshots will persist and remain accessible
 
-      console.log("Cleared queues.")
+      console.log("Reset view (screenshots preserved).")
 
       // Update the view state to 'queue'
       this.deps.setView("queue")
