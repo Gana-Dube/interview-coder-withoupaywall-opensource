@@ -83,7 +83,7 @@ function App() {
     []
   )
 
-  // Check for OpenAI API key and prompt if not found
+  // Check for Gemini API key and prompt if not found
   useEffect(() => {
     const checkApiKey = async () => {
       try {
@@ -183,7 +183,7 @@ function App() {
     const onApiKeyInvalid = () => {
       showToast(
         "API Key Invalid",
-        "Your OpenAI API key appears to be invalid or has insufficient credits",
+        "Your Gemini API key appears to be invalid or has insufficient credits",
         "error"
       )
       setApiKeyDialogOpen(true)

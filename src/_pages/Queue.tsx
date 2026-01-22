@@ -5,6 +5,7 @@ import QueueCommands from "../components/Queue/QueueCommands"
 
 import { useToast } from "../contexts/toast"
 import { Screenshot } from "../types/screenshots"
+import { isMacOS } from "../utils/platform"
 
 async function fetchScreenshots(): Promise<Screenshot[]> {
   try {
@@ -170,13 +171,14 @@ const Queue: React.FC<QueueProps> = ({
 
           {/* Context Text Input */}
           <div className="bg-black/60 rounded-lg p-3 backdrop-blur-md border border-white/10">
-            <label className="text-xs text-white/90 font-medium block mb-2">
-              Context (Paste text instead of screenshots)
+            <label className="text-xs text-white/90 font-medium block mb-2 flex items-center justify-between">
+              <span>Context (Paste text instead of screenshots)</span>
+              <span className="text-white/60 font-normal">{isMacOS ? 'Cmd' : 'Ctrl'}+B to hide window</span>
             </label>
             <textarea
               value={contextText}
               onChange={(e) => setContextText(e.target.value)}
-              placeholder="Paste your problem, question, or any text here...&#10;This works with Solve, Explain, and General modes."
+              placeholder=""
               className="w-full min-w-[400px] h-24 bg-black/40 text-white text-sm rounded border border-white/20 focus:border-white/40 focus:outline-none px-3 py-2 resize-none placeholder-white/40"
               style={{ lineHeight: '1.5' }}
             />

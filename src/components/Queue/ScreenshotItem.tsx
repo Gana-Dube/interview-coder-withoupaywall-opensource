@@ -88,13 +88,19 @@ const ScreenshotItem: React.FC<ScreenshotItemProps> = ({
 
   // Handle mouse down for dragging
   const handleMouseDown = (e: React.MouseEvent) => {
-    if (zoomLevel > 1) {
+    if (zoomLevel > 1 && containerRef.current) {
       e.preventDefault()
       e.stopPropagation()
+      
+      const containerRect = containerRef.current.getBoundingClientRect()
+      const containerCenterX = containerRect.left + containerRect.width / 2
+      const containerCenterY = containerRect.top + containerRect.height / 2
+      
+      // Calculate drag start relative to container center, accounting for current pan
       setIsDragging(true)
       setDragStart({
-        x: e.clientX - panPosition.x,
-        y: e.clientY - panPosition.y
+        x: e.clientX - containerCenterX - panPosition.x,
+        y: e.clientY - containerCenterY - panPosition.y
       })
     }
   }
@@ -103,29 +109,47 @@ const ScreenshotItem: React.FC<ScreenshotItemProps> = ({
   useEffect(() => {
     if (!isDragging || zoomLevel <= 1) return
 
+    let rafId: number | null = null
+
     const handleMouseMove = (e: MouseEvent) => {
-      if (!imageRef.current || !containerRef.current) return
+      if (!imageRef.current || !containerRef.current || imageSize.width === 0) return
 
-      const newX = e.clientX - dragStart.x
-      const newY = e.clientY - dragStart.y
+      // Cancel any pending animation frame
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId)
+      }
 
-      // Get image dimensions (already scaled by zoom level via width/height)
-      const img = imageRef.current
-      const imgRect = img.getBoundingClientRect()
-      const containerRect = containerRef.current.getBoundingClientRect()
+      rafId = requestAnimationFrame(() => {
+        if (!imageRef.current || !containerRef.current || imageSize.width === 0) return
 
-      // Calculate bounds based on actual rendered size
-      const maxX = Math.max(0, (imgRect.width - containerRect.width) / 2)
-      const maxY = Math.max(0, (imgRect.height - containerRect.height) / 2)
+        const containerRect = containerRef.current.getBoundingClientRect()
+        const containerCenterX = containerRect.left + containerRect.width / 2
+        const containerCenterY = containerRect.top + containerRect.height / 2
 
-      // Constrain pan position
-      const constrainedX = Math.max(-maxX, Math.min(maxX, newX))
-      const constrainedY = Math.max(-maxY, Math.min(maxY, newY))
+        // Calculate new position relative to container center
+        const newX = e.clientX - containerCenterX - dragStart.x
+        const newY = e.clientY - containerCenterY - dragStart.y
 
-      setPanPosition({ x: constrainedX, y: constrainedY })
+        // Calculate bounds based on base image size and zoom level
+        const scaledWidth = imageSize.width * zoomLevel
+        const scaledHeight = imageSize.height * zoomLevel
+
+        // Maximum pan distance is half the difference between scaled size and container size
+        const maxX = Math.max(0, (scaledWidth - containerRect.width) / 2)
+        const maxY = Math.max(0, (scaledHeight - containerRect.height) / 2)
+
+        // Constrain pan position
+        const constrainedX = Math.max(-maxX, Math.min(maxX, newX))
+        const constrainedY = Math.max(-maxY, Math.min(maxY, newY))
+
+        setPanPosition({ x: constrainedX, y: constrainedY })
+      })
     }
 
     const handleMouseUp = () => {
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId)
+      }
       setIsDragging(false)
     }
 
@@ -133,10 +157,13 @@ const ScreenshotItem: React.FC<ScreenshotItemProps> = ({
     window.addEventListener("mouseup", handleMouseUp)
 
     return () => {
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId)
+      }
       window.removeEventListener("mousemove", handleMouseMove)
       window.removeEventListener("mouseup", handleMouseUp)
     }
-  }, [isDragging, dragStart, zoomLevel])
+  }, [isDragging, dragStart, zoomLevel, imageSize])
 
   const handleToggleExpand = () => {
     if (!isLoading) {
@@ -173,6 +200,28 @@ const ScreenshotItem: React.FC<ScreenshotItemProps> = ({
     }
   }
 
+  // Constrain pan position when zoom changes
+  useEffect(() => {
+    if (!isExpanded || zoomLevel <= 1 || imageSize.width === 0 || !containerRef.current) {
+      if (zoomLevel <= 1) {
+        setPanPosition({ x: 0, y: 0 })
+      }
+      return
+    }
+
+    const containerRect = containerRef.current.getBoundingClientRect()
+    const scaledWidth = imageSize.width * zoomLevel
+    const scaledHeight = imageSize.height * zoomLevel
+
+    const maxX = Math.max(0, (scaledWidth - containerRect.width) / 2)
+    const maxY = Math.max(0, (scaledHeight - containerRect.height) / 2)
+
+    setPanPosition(prev => ({
+      x: Math.max(-maxX, Math.min(maxX, prev.x)),
+      y: Math.max(-maxY, Math.min(maxY, prev.y))
+    }))
+  }, [zoomLevel, imageSize, isExpanded])
+
   // Handle escape key to close
   useEffect(() => {
     if (!isExpanded) return
@@ -201,11 +250,12 @@ const ScreenshotItem: React.FC<ScreenshotItemProps> = ({
         >
           <div
             ref={imageContainerRef}
-            className="flex items-center justify-center will-change-transform"
+            className="flex items-center justify-center"
             style={{
               transform: `translate(${panPosition.x}px, ${panPosition.y}px)`,
-              transition: isDragging ? "none" : "transform 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
-              cursor: zoomLevel > 1 ? (isDragging ? "grabbing" : "grab") : "default"
+              transition: isDragging ? "none" : "transform 0.1s ease-out",
+              cursor: zoomLevel > 1 ? (isDragging ? "grabbing" : "grab") : "default",
+              willChange: isDragging ? "transform" : "auto"
             }}
             onMouseDown={handleMouseDown}
             onClick={(e) => {
@@ -231,7 +281,7 @@ const ScreenshotItem: React.FC<ScreenshotItemProps> = ({
                 maxHeight: 'none',
                 objectFit: 'contain',
                 imageRendering: 'auto',
-                transition: isDragging ? 'none' : 'width 0.2s cubic-bezier(0.4, 0, 0.2, 1), height 0.2s cubic-bezier(0.4, 0, 0.2, 1)'
+                transition: isDragging ? 'none' : 'width 0.15s ease-out, height 0.15s ease-out'
               }}
               className="rounded-lg shadow-2xl select-none pointer-events-none"
               draggable={false}
@@ -300,16 +350,32 @@ const ScreenshotItem: React.FC<ScreenshotItemProps> = ({
           />
         </div>
         {!isLoading && (
-          <button
-            onClick={(e) => {
-              e.stopPropagation()
-              handleDelete(e)
-            }}
-            className="absolute top-2 left-2 p-1 rounded-full bg-black bg-opacity-50 text-white opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-            aria-label="Delete screenshot"
-          >
-            <X size={16} />
-          </button>
+          <>
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                handleDelete(e)
+              }}
+              className="absolute top-2 left-2 p-1 rounded-full bg-black bg-opacity-50 text-white opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+              aria-label="Delete screenshot"
+            >
+              <X size={16} />
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                onToggleSelection?.()
+              }}
+              className={`absolute top-2 right-2 w-6 h-6 rounded-full text-xs font-medium transition-all duration-300 ${
+                isSelected
+                  ? "bg-blue-600 text-white opacity-100"
+                  : "bg-black bg-opacity-50 text-white/70 opacity-0 group-hover:opacity-100"
+              }`}
+              aria-label={`${isSelected ? 'Deselect' : 'Select'} screenshot ${index + 1}`}
+            >
+              {index + 1}
+            </button>
+          </>
         )}
       </div>
     </>

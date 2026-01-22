@@ -209,7 +209,7 @@ const electronAPI = {
   },
   getPlatform: () => process.platform,
   
-  // New methods for OpenAI API integration
+  // New methods for Gemini API integration
   getConfig: () => ipcRenderer.invoke("get-config"),
   updateConfig: (config: { apiKey?: string; model?: string; language?: string; opacity?: number }) => 
     ipcRenderer.invoke("update-config", config),

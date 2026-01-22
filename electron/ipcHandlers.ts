@@ -26,11 +26,11 @@ export function initializeIpcHandlers(deps: IIpcHandlerDeps): void {
     if (!configHelper.isValidApiKeyFormat(apiKey)) {
       return { 
         valid: false, 
-        error: "Invalid API key format. OpenAI API keys start with 'sk-'" 
+        error: "Invalid API key format. Please check your Gemini API key." 
       };
     }
     
-    // Then test the API key with OpenAI
+    // Then test the API key
     const result = await configHelper.testApiKey(apiKey);
     return result;
   })

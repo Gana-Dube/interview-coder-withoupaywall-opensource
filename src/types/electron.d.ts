@@ -55,7 +55,7 @@ export interface ElectronAPI {
   openSettingsPortal: () => Promise<void>
   getPlatform: () => string
   
-  // New methods for OpenAI integration
+  // New methods for Gemini API integration
   getConfig: () => Promise<{ apiKey: string; model: string }>
   updateConfig: (config: { apiKey?: string; model?: string }) => Promise<boolean>
   checkApiKey: () => Promise<boolean>
